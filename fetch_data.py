@@ -28,18 +28,18 @@ if not CLOSE_API_KEY:
     print("ERROR: CLOSE_API_KEY environment variable not set.", file=sys.stderr)
     sys.exit(1)
 
-# Known custom field IDs (from dashboard-metrics-reference.md + confirmed in Close)
-CF_FUNNEL_NAME_DEAL       = "cf_xqDQE8fkPsWa0RNEve7hcaxKblCe6489XeZGRDzyPdX"
-CF_FIRST_CALL_BOOKED_DATE = "cf_JsJZIVh7QDcFQBXr4cTRBxf1AkREpLdsKiZB4AEJ8Xh"
-CF_UTM_CONTENT            = "cf_R7o66i0XPycLQHlxOLbIqk6c6j3oB8CzxF3e3apI1hn"
-CF_FIRST_CALL_SHOW_UP     = "cf_OPyvpU45RdvjLqfm8V1VWwNxrGKogEH2IBJmfCj0Uhq"
-CF_QUALIFIED              = "cf_ZDx7NBQaDzV1yYrFcBMzt6cIYj81dAcswpNN0CQzCPS"
+# Known custom field IDs (confirmed in Close)
+CF_FUNNEL_NAME_DEAL           = "cf_xqDQE8fkPsWa0RNEve7hcaxKblCe6489XeZGRDzyPdX"
+# CF_FIRST_SALES_CALL_BOOKED_DATE is discovered at runtime by field name (see main())
+CF_FIRST_CALL_SHOW_UP         = "cf_OPyvpU45RdvjLqfm8V1VWwNxrGKogEH2IBJmfCj0Uhq"
+CF_QUALIFIED                  = "cf_ZDx7NBQaDzV1yYrFcBMzt6cIYj81dAcswpNN0CQzCPS"
 
-# Lead statuses
+# Lead statuses — Close returns these with emoji prefixes stripped in status_label
 STATUS_CANCELED    = "Canceled (by Lead)"
 STATUS_OUTSIDE_US  = "Outside the US"
 STATUS_LOST        = "Lost"
 STATUS_CLOSED_WON  = "Closed/Won"
+STATUS_NO_SHOW     = "No Show"          # excluded from open pipeline
 EXCLUDED_FROM_BOOKED = {STATUS_CANCELED, STATUS_OUTSIDE_US}
 
 THROTTLE = 0.35   # seconds between API calls (stay under Close's ~100 req/min)
@@ -54,15 +54,15 @@ THROTTLE = 0.35   # seconds between API calls (stay under Close's ~100 req/min)
 WEBINARS = [
     {
         "label":              "March 24, 2026 Webinar",
-        "utm_content":        "mar24_end_cta",
-        "booked_on_or_after": "2026-03-24",   # First Call Booked Date >= this
+        "booked_on_or_after": "2026-03-24",   # First Sales Call Booked Date >= this
+        "booked_before":      "2026-04-24",   # exclusive upper bound (next webinar date)
         "active":             True,
     },
-    # Uncomment and update when the April webinar runs:
+    # Uncomment when the April webinar runs:
     # {
     #     "label":              "April 24, 2026 Webinar",
-    #     "utm_content":        "apr24_end_cta",
     #     "booked_on_or_after": "2026-04-24",
+    #     "booked_before":      "2026-05-24",   # update to next webinar date
     #     "active":             False,
     # },
 ]
@@ -162,11 +162,14 @@ def fetch_internal_webinar_leads() -> list[dict]:
 def process_webinar(webinar: dict, all_leads: list[dict], field_ids: dict) -> dict:
     """
     Filter and categorize leads for a specific webinar config.
-    All leads are pre-fetched (by funnel) to avoid redundant API calls.
+    Filtering logic:
+      - First Sales Call Booked Date >= booked_on_or_after (and < booked_before if set)
+      - Excludes Canceled (by Lead) and Outside the US from booked count
+      - No Show is counted as booked but NOT as open pipeline
     """
-    utm_value       = webinar["utm_content"]
-    start_date      = webinar["booked_on_or_after"]   # "YYYY-MM-DD"
-    utm_cf_id       = field_ids.get("utm_cf_id")
+    start_date      = webinar["booked_on_or_after"]        # "YYYY-MM-DD"
+    end_date        = webinar.get("booked_before", "")     # optional upper bound
+    sales_booked_cf = field_ids.get("sales_booked_cf_id")
     show_up_cf_id   = field_ids.get("show_up_cf_id")
     qualified_cf_id = field_ids.get("qualified_cf_id")
 
@@ -176,6 +179,7 @@ def process_webinar(webinar: dict, all_leads: list[dict], field_ids: dict) -> di
         "qualified":                   0,
         "closed_won":                  0,
         "open_pipeline":               0,
+        "no_show":                     0,
         "lost":                        0,
         "excluded_cancelled_outside":  0,
     }
@@ -183,31 +187,43 @@ def process_webinar(webinar: dict, all_leads: list[dict], field_ids: dict) -> di
     for lead in all_leads:
         custom = lead.get("custom") or {}
 
-        # ── 1. Filter: utm_content must match ─────────────────────────────────
-        lead_utm = str(custom.get(CF_UTM_CONTENT, "") or "").strip()
+        # ── 1. Filter: First Sales Call Booked Date in window ─────────────────
+        if sales_booked_cf:
+            booked_raw = str(custom.get(sales_booked_cf, "") or "").strip()
+        else:
+            # Fallback: scan for any field matching the name
+            booked_raw = ""
+            for k, v in custom.items():
+                if "first sales call booked" in k.lower():
+                    booked_raw = str(v or "").strip()
+                    break
 
-        if lead_utm != utm_value.strip():
-            continue
-
-        # ── 2. Filter: First Call Booked Date >= start_date ───────────────────
-        booked_raw = str(custom.get(CF_FIRST_CALL_BOOKED_DATE, "") or "").strip()
         if not booked_raw:
             continue
         booked_date = booked_raw[:10]   # "YYYY-MM-DD"
         if booked_date < start_date:
             continue
+        if end_date and booked_date >= end_date:
+            continue
 
-        # ── 3. Status-based categorization ────────────────────────────────────
-        status = (lead.get("status_label") or "").strip()
+        # ── 2. Status-based categorization ────────────────────────────────────
+        status_raw = (lead.get("status_label") or "").strip()
+        # Close returns status_label with emoji prefix (e.g. "🔻 Canceled (by Lead)")
+        # Strip leading emoji/symbols so matching is reliable
+        status = status_raw.lstrip("🔻📄👻☎️🗓️📞🏆🕛💤💔 ").strip()
 
-        if status in EXCLUDED_FROM_BOOKED:
+        # Check for excluded statuses (partial match to catch emoji variants)
+        def status_is(label: str) -> bool:
+            return label.lower() in status_raw.lower()
+
+        if status_is("Canceled (by Lead)") or status_is("Outside the US"):
             counts["excluded_cancelled_outside"] += 1
             continue
 
         # This lead counts as a valid "booked" meeting
         counts["booked"] += 1
 
-        # ── 4. Opportunity-level fields (show-up / qualified) ─────────────────
+        # ── 3. Opportunity-level fields (show-up / qualified) ─────────────────
         showed    = False
         qualified = False
         for opp in (lead.get("opportunities") or []):
@@ -228,15 +244,15 @@ def process_webinar(webinar: dict, all_leads: list[dict], field_ids: dict) -> di
         if qualified:
             counts["qualified"] += 1
 
-        # ── 5. Win / Loss / Open Pipeline ─────────────────────────────────────
-        if status == STATUS_CLOSED_WON:
+        # ── 4. Win / Loss / No Show / Open Pipeline ───────────────────────────
+        if status_is("Closed / Won") or status_is("Closed/Won"):
             counts["closed_won"] += 1
-            # Closed Won is NOT counted as open pipeline
-        elif status == STATUS_LOST:
+        elif status_is("Lost"):
             counts["lost"] += 1
-            # Lost is NOT counted as open pipeline
+        elif status_is("No Show"):
+            counts["no_show"] += 1
+            # No Show = not open pipeline (attended their slot but didn't show)
         else:
-            # Active — in the pipeline, not dead-ended
             counts["open_pipeline"] += 1
 
     # ── Derived rates (% of booked) ───────────────────────────────────────────
@@ -247,8 +263,8 @@ def process_webinar(webinar: dict, all_leads: list[dict], field_ids: dict) -> di
 
     return {
         "label":          webinar["label"],
-        "utm_content":    utm_value,
         "start_date":     start_date,
+        "end_date":       end_date,
         "counts":         counts,
         "show_rate":      pct(counts["showed"]),
         "qualified_rate": pct(counts["qualified"]),
@@ -610,13 +626,29 @@ def main() -> None:
     ts = datetime.now(PACIFIC).strftime("%Y-%m-%d %H:%M PST")
     print(f"=== Internal Webinar Dashboard - {ts} ===\n")
 
-    # All custom field IDs confirmed and hardcoded
+    # Discover "First Sales Call Booked Date" field ID by name
+    print("Discovering lead custom field IDs...")
+    lead_fields = get_all_pages("/custom_field/lead/")
+    lead_cf_map = {f["name"]: f["id"] for f in lead_fields}
+
+    sales_booked_cf_id = None
+    for candidate in ["First Sales Call Booked Date", "First Sales Call Booked",
+                       "First Sales Booked Date"]:
+        if candidate in lead_cf_map:
+            sales_booked_cf_id = lead_cf_map[candidate]
+            print(f"  Found '{candidate}' -> {sales_booked_cf_id}")
+            break
+    if not sales_booked_cf_id:
+        print("  WARNING: 'First Sales Call Booked Date' not found by name.")
+        print("  Available lead fields:", sorted(lead_cf_map.keys()))
+        print("  Will attempt fallback scan on lead custom data.")
+
     field_ids = {
-        "utm_cf_id":       CF_UTM_CONTENT,
-        "show_up_cf_id":   CF_FIRST_CALL_SHOW_UP,
-        "qualified_cf_id": CF_QUALIFIED,
+        "sales_booked_cf_id": sales_booked_cf_id,
+        "show_up_cf_id":      CF_FIRST_CALL_SHOW_UP,
+        "qualified_cf_id":    CF_QUALIFIED,
     }
-    print("Custom field IDs:")
+    print("Field IDs in use:")
     for k, v in field_ids.items():
         print(f"  {k}: {v}")
 
