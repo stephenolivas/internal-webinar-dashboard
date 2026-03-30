@@ -280,6 +280,7 @@ def process_webinar(webinar: dict, all_leads: list[dict], field_ids: dict) -> di
 
     return {
         "label":          webinar["label"],
+        "utm_content":    utm_value,
         "start_date":     start_date,
         "end_date":       end_date,
         "counts":         counts,
