@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Internal Webinar Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #edf0ed;
+      color: #1a1a1a;
+      font-size: 13px;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────── */
+    .site-header {
+      background: #0f1f10;
+      color: #d4e8c2;
+      padding: 10px 20px 11px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .title-group h1 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #e8f5e0;
+      letter-spacing: 0.02em;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .title-group h1 svg {
+      width: 16px; height: 16px; fill: #5ccc6e; flex-shrink: 0;
+    }
+    .title-group .subtitle {
+      font-size: 11px;
+      color: #7aaa68;
+      margin-top: 3px;
+      margin-left: 23px;
+    }
+    .meta-right {
+      text-align: right;
+      font-size: 11px;
+      color: #7aaa68;
+    }
+    .meta-right .date-line {
+      color: #a8d88a;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .live-dot {
+      display: inline-block;
+      width: 7px; height: 7px;
+      background: #4ccc44;
+      border-radius: 50%;
+      margin-right: 5px;
+      animation: blink 2s ease-in-out infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────────── */
+    .main {
+      max-width: 900px;
+      margin: 22px auto;
+      padding: 0 16px;
+    }
+
+    /* ── Webinar Card ────────────────────────────────────────────────── */
+    .webinar-card {
+      background: #fff;
+      border: 1px solid #cfd9cf;
+      border-radius: 4px;
+      margin-bottom: 22px;
+      overflow: hidden;
+    }
+    .card-header {
+      background: #f5f8f4;
+      border-bottom: 2px solid #cfd9cf;
+      padding: 9px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .card-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #1d5c2e;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+    }
+    .utm-badge {
+      background: #e2f0e2;
+      color: #1a5a2a;
+      font-size: 10px;
+      font-weight: 700;
+      font-family: "SF Mono", "Fira Code", monospace;
+      padding: 2px 8px;
+      border-radius: 10px;
+      border: 1px solid #a8cca8;
+    }
+    .card-meta {
+      font-size: 11px;
+      color: #8aaa88;
+      margin-left: auto;
+    }
+
+    /* ── Funnel Table ────────────────────────────────────────────────── */
+    .funnel-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .funnel-table thead tr {
+      background: #f2f6f2;
+    }
+    .funnel-table th {
+      padding: 7px 16px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #4a7050;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      border-bottom: 1px solid #d8e4d8;
+      text-align: left;
+    }
+    .funnel-table th.num-th { text-align: right; }
+    .funnel-table td {
+      padding: 10px 16px;
+      border-bottom: 1px solid #edf0ed;
+      vertical-align: middle;
+    }
+    .funnel-table tbody tr:last-child td { border-bottom: none; }
+    .funnel-table tbody tr:hover { background: #fafbfa; }
+
+    .metric-name { font-weight: 600; color: #222; }
+    .metric-desc { font-size: 11px; color: #999; margin-top: 2px; }
+
+    .num-cell {
+      text-align: right;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .big-num {
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .num-booked    { color: #1a2e1a; }
+    .num-showed    { color: #1a7f3c; }
+    .num-qualified { color: #2255cc; }
+    .num-won       { color: #b84400; }
+    .num-open      { color: #4a7722; }
+
+    .pct-badge {
+      display: inline-block;
+      margin-left: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      background: #3a8a4a;
+      padding: 2px 8px;
+      border-radius: 10px;
+      vertical-align: middle;
+    }
+
+    /* Bar */
+    .bar-cell  { width: 160px; }
+    .bar-bg    {
+      height: 8px;
+      background: #e4ece4;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .bar-fill       { height: 100%; border-radius: 4px; }
+    .bar-showed     { background: #3db554; }
+    .bar-qualified  { background: #4477dd; }
+    .bar-won        { background: #dd6622; }
+    .bar-open       { background: #88aa44; }
+
+    /* Footnote */
+    .footnote {
+      padding: 7px 16px;
+      font-size: 11px;
+      color: #888;
+      background: #fafafa;
+      border-top: 1px solid #eee;
+    }
+
+    /* No data */
+    .no-data {
+      padding: 36px 16px;
+      text-align: center;
+      color: #aaa;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 18px;
+      font-size: 11px;
+      color: #9aa99a;
+    }
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="title-group">
+    <h1>
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 3h18v2H3V3zm0 4h18v2H3V7zm0 4h12v2H3v-2zm0 4h8v2H3v-2zM14 12l6 4-6 4V12z"/>
+      </svg>
+      Internal Webinar Dashboard
+    </h1>
+    <div class="subtitle">Funnel Name DEAL = Internal Webinar &nbsp;·&nbsp; First Sales Call Booked &ge; webinar date</div>
+  </div>
+  <div class="meta-right">
+    <div class="date-line"><span class="live-dot"></span>Monday, March 30, 2026</div>
+    <div>Last updated: 10:38 AM PST</div>
+  </div>
+</header>
+
+<main class="main">
+  
+<section class="webinar-card">
+  <div class="card-header">
+    <span class="card-label">March 24, 2026 Webinar</span>
+    <span class="utm-badge">mar24_end_cta</span>
+    <span class="card-meta">bookings on or after 2026-03-24</span>
+  </div>
+  
+  <table class="funnel-table">
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th class="num-th">Count / Rate</th>
+        <th>% of Booked</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <div class="metric-name">Total Booked</div>
+          <div class="metric-desc">Fresh first-call meetings — excludes Canceled by Lead &amp; Outside US</div>
+        </td>
+        <td class="num-cell">
+          <span class="big-num num-booked">47</span>
+        </td>
+        <td class="bar-cell"></td>
+      </tr>
+      <tr>
+        <td>
+          <div class="metric-name">Showed</div>
+          <div class="metric-desc">First Call Show Up (Opp) = Yes</div>
+        </td>
+        <td class="num-cell">
+          <span class="big-num num-showed">31</span><span class="pct-badge">66.0%</span>
+        </td>
+        <td class="bar-cell"><div class="bar-bg"><div class="bar-fill bar-showed" style="width:66.0%"></div></div></td>
+      </tr>
+      <tr>
+        <td>
+          <div class="metric-name">Qualified</div>
+          <div class="metric-desc">Qualified (Opp) = Yes</div>
+        </td>
+        <td class="num-cell">
+          <span class="big-num num-qualified">22</span><span class="pct-badge">46.8%</span>
+        </td>
+        <td class="bar-cell"><div class="bar-bg"><div class="bar-fill bar-qualified" style="width:46.8%"></div></div></td>
+      </tr>
+      <tr>
+        <td>
+          <div class="metric-name">Closed Won</div>
+          <div class="metric-desc">Lead status = Closed/Won</div>
+        </td>
+        <td class="num-cell">
+          <span class="big-num num-won">8</span><span class="pct-badge">17.0%</span>
+        </td>
+        <td class="bar-cell"><div class="bar-bg"><div class="bar-fill bar-won" style="width:17.0%"></div></div></td>
+      </tr>
+      <tr>
+        <td>
+          <div class="metric-name">Open Pipeline</div>
+          <div class="metric-desc">Active — not Lost, not Closed Won, not Canceled/Outside US</div>
+        </td>
+        <td class="num-cell">
+          <span class="big-num num-open">29</span><span class="pct-badge">61.7%</span>
+        </td>
+        <td class="bar-cell"><div class="bar-bg"><div class="bar-fill bar-open" style="width:61.7%"></div></div></td>
+      </tr>
+    </tbody>
+  </table><div class="footnote">&#9432; 3 excluded (Canceled by Lead or Outside US) · 10 Lost</div>
+</section>
+</main>
+
+<footer>
+  Data source: Close CRM &nbsp;·&nbsp; Hosted on GitHub Pages &nbsp;·&nbsp; Updated via cron-job.org &rarr; GitHub Actions
+</footer>
+
+</body>
+</html>
