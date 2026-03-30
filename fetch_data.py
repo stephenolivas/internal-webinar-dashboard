@@ -30,6 +30,7 @@ if not CLOSE_API_KEY:
 
 # Known custom field IDs (confirmed in Close)
 CF_FUNNEL_NAME_DEAL           = "cf_xqDQE8fkPsWa0RNEve7hcaxKblCe6489XeZGRDzyPdX"
+CF_UTM_CONTENT                = "cf_R7o66i0XPycLQHlxOLbIqk6c6j3oB8CzxF3e3apI1hn"  # Contact-level field
 # CF_FIRST_SALES_CALL_BOOKED_DATE is discovered at runtime by field name (see main())
 CF_FIRST_CALL_SHOW_UP         = "cf_OPyvpU45RdvjLqfm8V1VWwNxrGKogEH2IBJmfCj0Uhq"
 CF_QUALIFIED                  = "cf_ZDx7NBQaDzV1yYrFcBMzt6cIYj81dAcswpNN0CQzCPS"
