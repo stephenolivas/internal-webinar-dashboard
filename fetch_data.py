@@ -28,9 +28,12 @@ if not CLOSE_API_KEY:
     print("ERROR: CLOSE_API_KEY environment variable not set.", file=sys.stderr)
     sys.exit(1)
 
-# Known custom field IDs (from dashboard-metrics-reference.md)
+# Known custom field IDs (from dashboard-metrics-reference.md + confirmed in Close)
 CF_FUNNEL_NAME_DEAL       = "cf_xqDQE8fkPsWa0RNEve7hcaxKblCe6489XeZGRDzyPdX"
 CF_FIRST_CALL_BOOKED_DATE = "cf_JsJZIVh7QDcFQBXr4cTRBxf1AkREpLdsKiZB4AEJ8Xh"
+CF_UTM_CONTENT            = "cf_R7o66i0XPycLQHlxOLbIqk6c6j3oB8CzxF3e3apI1hn"
+CF_FIRST_CALL_SHOW_UP     = "cf_OPyvpU45RdvjLqfm8V1VWwNxrGKogEH2IBJmfCj0Uhq"
+CF_QUALIFIED              = "cf_ZDx7NBQaDzV1yYrFcBMzt6cIYj81dAcswpNN0CQzCPS"
 
 # Lead statuses
 STATUS_CANCELED    = "Canceled (by Lead)"
@@ -181,16 +184,7 @@ def process_webinar(webinar: dict, all_leads: list[dict], field_ids: dict) -> di
         custom = lead.get("custom") or {}
 
         # ── 1. Filter: utm_content must match ─────────────────────────────────
-        if utm_cf_id:
-            lead_utm = str(custom.get(utm_cf_id, "") or "").strip()
-        else:
-            # No field ID found — scan all custom keys for "utm_content"
-            lead_utm = ""
-            for k, v in custom.items():
-                kl = k.lower()
-                if "utm_content" in kl or "utm content" in kl:
-                    lead_utm = str(v or "").strip()
-                    break
+        lead_utm = str(custom.get(CF_UTM_CONTENT, "") or "").strip()
 
         if lead_utm != utm_value.strip():
             continue
@@ -614,30 +608,17 @@ def generate_html(all_metrics: list[dict]) -> str:
 
 def main() -> None:
     ts = datetime.now(PACIFIC).strftime("%Y-%m-%d %H:%M PST")
-    print(f"=== Internal Webinar Dashboard — {ts} ===\n")
+    print(f"=== Internal Webinar Dashboard - {ts} ===\n")
 
-    # ── Step 1: Discover custom field IDs ────────────────────────────────────
-    lead_cf_map, opp_cf_map = discover_custom_fields()
-
-    print("\nResolving field IDs...")
-    utm_cf_id = resolve_field(
-        lead_cf_map,
-        "utm_content", "UTM Content", "UTM Content (Lead)", "utm content",
-    )
-    show_up_cf_id = resolve_field(
-        opp_cf_map,
-        "First Call Show Up (Opp)", "First Call Show Up", "First Call Showup (Opp)",
-    )
-    qualified_cf_id = resolve_field(
-        opp_cf_map,
-        "Qualified (Opp)", "Qualified", "ICP Qualified (Opp)", "ICP Qualified",
-    )
-
+    # All custom field IDs confirmed and hardcoded
     field_ids = {
-        "utm_cf_id":       utm_cf_id,
-        "show_up_cf_id":   show_up_cf_id,
-        "qualified_cf_id": qualified_cf_id,
+        "utm_cf_id":       CF_UTM_CONTENT,
+        "show_up_cf_id":   CF_FIRST_CALL_SHOW_UP,
+        "qualified_cf_id": CF_QUALIFIED,
     }
+    print("Custom field IDs:")
+    for k, v in field_ids.items():
+        print(f"  {k}: {v}")
 
     # ── Step 2: Fetch all Internal Webinar leads once ─────────────────────────
     all_leads = fetch_internal_webinar_leads()
