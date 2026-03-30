@@ -54,15 +54,17 @@ THROTTLE = 0.35   # seconds between API calls (stay under Close's ~100 req/min)
 WEBINARS = [
     {
         "label":              "March 24, 2026 Webinar",
-        "booked_on_or_after": "2026-03-24",   # First Sales Call Booked Date >= this
-        "booked_before":      "2026-04-24",   # exclusive upper bound (next webinar date)
+        "utm_content":        "mar24_end_cta",   # Contact-level utm_content field
+        "booked_on_or_after": "2026-03-24",      # First Sales Call Booked Date >= this
+        "booked_before":      "2026-04-24",      # exclusive upper bound (next webinar date)
         "active":             True,
     },
     # Uncomment when the April webinar runs:
     # {
     #     "label":              "April 24, 2026 Webinar",
+    #     "utm_content":        "apr24_end_cta",
     #     "booked_on_or_after": "2026-04-24",
-    #     "booked_before":      "2026-05-24",   # update to next webinar date
+    #     "booked_before":      "2026-05-24",
     #     "active":             False,
     # },
 ]
@@ -150,7 +152,7 @@ def fetch_internal_webinar_leads() -> list[dict]:
     query  = f'custom.{CF_FUNNEL_NAME_DEAL}:"Internal Webinar"'
     params = {
         "query":   query,
-        "_fields": "id,display_name,status_label,custom,opportunities",
+        "_fields": "id,display_name,status_label,custom,opportunities,contacts",
     }
     leads = get_all_pages("/lead/", params)
     print(f"  → {len(leads)} leads fetched with Funnel = Internal Webinar")
@@ -167,6 +169,7 @@ def process_webinar(webinar: dict, all_leads: list[dict], field_ids: dict) -> di
       - Excludes Canceled (by Lead) and Outside the US from booked count
       - No Show is counted as booked but NOT as open pipeline
     """
+    utm_value       = webinar.get("utm_content", "")       # Contact-level field value
     start_date      = webinar["booked_on_or_after"]        # "YYYY-MM-DD"
     end_date        = webinar.get("booked_before", "")     # optional upper bound
     sales_booked_cf = field_ids.get("sales_booked_cf_id")
@@ -187,7 +190,20 @@ def process_webinar(webinar: dict, all_leads: list[dict], field_ids: dict) -> di
     for lead in all_leads:
         custom = lead.get("custom") or {}
 
-        # ── 1. Filter: First Sales Call Booked Date in window ─────────────────
+        # ── 1a. Filter: utm_content on any contact must match ────────────────────
+        if utm_value:
+            contacts = lead.get("contacts") or []
+            matched_utm = False
+            for contact in contacts:
+                contact_custom = contact.get("custom") or {}
+                val = str(contact_custom.get(CF_UTM_CONTENT, "") or "").strip()
+                if val == utm_value:
+                    matched_utm = True
+                    break
+            if not matched_utm:
+                continue
+
+        # ── 1b. Filter: First Sales Call Booked Date in window ────────────────
         if sales_booked_cf:
             booked_raw = str(custom.get(sales_booked_cf, "") or "").strip()
         else:
